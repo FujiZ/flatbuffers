@@ -236,7 +236,10 @@ class CppGenerator : public BaseGenerator {
       code_ += "#pragma clang system_header\n\n";
     }
 
-    code_ += "#include \"flatbuffers/flatbuffers.h\"";
+    if (parser_.opts.zrpc_enabled)
+      code_ += "#include \"zrpc/flatbuffers.h\"";
+    else
+      code_ += "#include \"flatbuffers/flatbuffers.h\"";
     if (parser_.uses_flexbuffers_) {
       code_ += "#include \"flatbuffers/flexbuffers.h\"";
     }
@@ -1807,6 +1810,60 @@ class CppGenerator : public BaseGenerator {
     }
   }
 
+  /**
+   * @brief Generate a overloaded version of CompareLessThan()
+   * method for table key, which is used in zrpc::FlatbufferBuilder.
+   * @author FujiZ
+   */
+  void GenTableKeyCompareMethod(const FieldDef &field) {
+    FLATBUFFERS_ASSERT(field.key);
+    const bool is_string = (field.value.type.base_type == BASE_TYPE_STRING);
+
+    code_ += "  bool KeyCompareLessThan(const {{STRUCT_NAME}} *o, "
+             "const zrpc::flatbuffers::vector_downward &buf) const {";
+    if (is_string) {
+      // use operator< of flatbuffers::String
+      code_ += "    return *{{FIELD_NAME}}(buf) < *o->{{FIELD_NAME}}(buf);";
+    } else {
+      code_ += "    return {{FIELD_NAME}}(buf) < o->{{FIELD_NAME}}(buf);";
+    }
+    code_ += "  }";
+  }
+
+  /**
+   * @brief Generate field accessor for table key,
+   * which is used to implement comparator upon zrpc::FlatbufferBuilder.
+   * @note this function sets FIELD_VALUE in code_.
+   * @author FujiZ
+   */
+  void GenTableKeyFieldAccessor(const FieldDef &field) {
+    FLATBUFFERS_ASSERT(field.key);
+    // key field is either scalar or string type.
+    const bool is_string = (field.value.type.base_type == BASE_TYPE_STRING);
+
+    // Call a different accessor for pointers, that indirects.
+    std::string accessor;
+    if (is_string) {
+      accessor = "accessor.GetPointer<";
+    } else {
+      accessor = "accessor.GetField<";
+    }
+    auto offset_str = GenFieldOffsetName(field);
+    auto offset_type = GenTypeGet(field.value.type, "", "const ", " *", false);
+
+    auto call = accessor + offset_type + ">(" + offset_str;
+    // Default value as second arg for non-pointer types.
+    if (!is_string) {
+      call += ", " + GenDefaultConstant(field);
+    }
+    call += ")";
+    code_.SetValue("FIELD_VALUE", GenUnderlyingCast(field, true, call));
+    code_ += "  {{FIELD_TYPE}}{{FIELD_NAME}}(const zrpc::flatbuffers::vector_downward &buf) const {";
+    code_ += "    zrpc::flatbuffers::TableAccessor accessor(reinterpret_cast<const uint8_t *>(this), buf);";
+    code_ += "    return {{FIELD_VALUE}};";
+    code_ += "  }";
+  }
+
   // Generate an accessor struct, builder structs & function for a table.
   void GenTable(const StructDef &struct_def) {
     if (parser_.opts.generate_object_based_api) { GenNativeTable(struct_def); }
@@ -1896,6 +1953,11 @@ class CppGenerator : public BaseGenerator {
       code_ += "  {{FIELD_TYPE}}{{FIELD_NAME}}() const {";
       code_ += "    return {{FIELD_VALUE}};";
       code_ += "  }";
+
+      // generate accessor for key field when zrpc is enabled
+      if (parser_.opts.zrpc_enabled && field.key) {
+        GenTableKeyFieldAccessor(field);
+      }
 
       if (field.value.type.base_type == BASE_TYPE_UNION) {
         auto u = field.value.type.enum_def;
@@ -1996,7 +2058,10 @@ class CppGenerator : public BaseGenerator {
       }
 
       // Generate a comparison function for this field if it is a key.
-      if (field.key) { GenKeyFieldMethods(field); }
+      if (field.key) {
+        GenKeyFieldMethods(field);
+        GenTableKeyCompareMethod(field);
+      }
     }
 
     // Generate a verifier function that can check a buffer from an untrusted

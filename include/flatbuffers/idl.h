@@ -511,6 +511,7 @@ struct ServiceDef : public Definition {
 struct IDLOptions {
   // Use flexbuffers instead for binary and text generation
   bool use_flexbuffers;
+  bool zrpc_enabled;
   bool strict_json;
   bool skip_js_exports;
   bool use_goog_js_export_format;
