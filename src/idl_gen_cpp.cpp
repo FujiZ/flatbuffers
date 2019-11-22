@@ -450,7 +450,7 @@ class CppGenerator : public BaseGenerator {
 
       // Finish a buffer with a given root object:
       code_ += "inline void Finish{{STRUCT_NAME}}Buffer(";
-      code_ += "    flatbuffers::FlatBufferBuilder &fbb,";
+      code_ += "    " + GetBufferBuilderType() + " &fbb,";
       code_ += "    flatbuffers::Offset<{{CPP_NAME}}> root) {";
       if (parser_.file_identifier_.length())
         code_ += "  fbb.Finish(root, {{STRUCT_NAME}}Identifier());";
@@ -460,7 +460,7 @@ class CppGenerator : public BaseGenerator {
       code_ += "";
 
       code_ += "inline void FinishSizePrefixed{{STRUCT_NAME}}Buffer(";
-      code_ += "    flatbuffers::FlatBufferBuilder &fbb,";
+      code_ += "    " + GetBufferBuilderType() + " &fbb,";
       code_ += "    flatbuffers::Offset<{{CPP_NAME}}> root) {";
       if (parser_.file_identifier_.length())
         code_ += "  fbb.FinishSizePrefixed(root, {{STRUCT_NAME}}Identifier());";
@@ -526,6 +526,13 @@ class CppGenerator : public BaseGenerator {
       cpp_qualified_name.replace(start_pos, 1, "::");
     }
     return cpp_qualified_name;
+  }
+
+  std::string GetBufferBuilderType() const {
+    if (parser_.opts.zrpc_enabled)
+      return "::zrpc::flatbuffers::FlatBufferBuilder";
+    else
+      return "flatbuffers::FlatBufferBuilder";
   }
 
   bool TypeHasKey(const Type &type) {
@@ -789,7 +796,7 @@ class CppGenerator : public BaseGenerator {
   std::string UnionPackSignature(const EnumDef &enum_def, bool inclass) {
     return "flatbuffers::Offset<void> " +
            (inclass ? "" : Name(enum_def) + "Union::") +
-           "Pack(flatbuffers::FlatBufferBuilder &_fbb, " +
+           "Pack(" + GetBufferBuilderType() + " &_fbb, " +
            "const flatbuffers::rehasher_function_t *_rehasher" +
            (inclass ? " = nullptr" : "") + ") const";
   }
@@ -797,7 +804,7 @@ class CppGenerator : public BaseGenerator {
   std::string TableCreateSignature(const StructDef &struct_def, bool predecl,
                                    const IDLOptions &opts) {
     return "flatbuffers::Offset<" + Name(struct_def) + "> Create" +
-           Name(struct_def) + "(flatbuffers::FlatBufferBuilder &_fbb, const " +
+           Name(struct_def) + "(" + GetBufferBuilderType() + " &_fbb, const " +
            NativeName(Name(struct_def), &struct_def, opts) +
            " *_o, const flatbuffers::rehasher_function_t *_rehasher" +
            (predecl ? " = nullptr" : "") + ")";
@@ -807,7 +814,7 @@ class CppGenerator : public BaseGenerator {
                                  const IDLOptions &opts) {
     return std::string(inclass ? "static " : "") + "flatbuffers::Offset<" +
            Name(struct_def) + "> " + (inclass ? "" : Name(struct_def) + "::") +
-           "Pack(flatbuffers::FlatBufferBuilder &_fbb, " + "const " +
+           "Pack(" + GetBufferBuilderType() + " &_fbb, " + "const " +
            NativeName(Name(struct_def), &struct_def, opts) + "* _o, " +
            "const flatbuffers::rehasher_function_t *_rehasher" +
            (inclass ? " = nullptr" : "") + ")";
@@ -1820,7 +1827,7 @@ class CppGenerator : public BaseGenerator {
     const bool is_string = (field.value.type.base_type == BASE_TYPE_STRING);
 
     code_ += "  bool KeyCompareLessThan(const {{STRUCT_NAME}} *o, "
-             "const zrpc::flatbuffers::vector_downward &buf) const {";
+             "const ::zrpc::flatbuffers::vector_downward &buf) const {";
     if (is_string) {
       // use operator< of flatbuffers::String
       code_ += "    return *{{FIELD_NAME}}(buf) < *o->{{FIELD_NAME}}(buf);";
@@ -1858,8 +1865,8 @@ class CppGenerator : public BaseGenerator {
     }
     call += ")";
     code_.SetValue("FIELD_VALUE", GenUnderlyingCast(field, true, call));
-    code_ += "  {{FIELD_TYPE}}{{FIELD_NAME}}(const zrpc::flatbuffers::vector_downward &buf) const {";
-    code_ += "    zrpc::flatbuffers::TableAccessor accessor(reinterpret_cast<const uint8_t *>(this), buf);";
+    code_ += "  {{FIELD_TYPE}}{{FIELD_NAME}}(const ::zrpc::flatbuffers::vector_downward &buf) const {";
+    code_ += "    ::zrpc::flatbuffers::TableAccessor accessor(reinterpret_cast<const uint8_t *>(this), buf);";
     code_ += "    return {{FIELD_VALUE}};";
     code_ += "  }";
   }
@@ -2142,7 +2149,7 @@ class CppGenerator : public BaseGenerator {
 
     // Generate a builder struct:
     code_ += "struct {{STRUCT_NAME}}Builder {";
-    code_ += "  flatbuffers::FlatBufferBuilder &fbb_;";
+    code_ += "  " + GetBufferBuilderType() + " &fbb_;";
     code_ += "  flatbuffers::uoffset_t start_;";
 
     bool has_string_or_vector_fields = false;
@@ -2190,8 +2197,7 @@ class CppGenerator : public BaseGenerator {
 
     // Builder constructor
     code_ +=
-        "  explicit {{STRUCT_NAME}}Builder(flatbuffers::FlatBufferBuilder "
-        "&_fbb)";
+        "  explicit {{STRUCT_NAME}}Builder(" + GetBufferBuilderType() + " &_fbb)";
     code_ += "        : fbb_(_fbb) {";
     code_ += "    start_ = fbb_.StartTable();";
     code_ += "  }";
@@ -2225,7 +2231,7 @@ class CppGenerator : public BaseGenerator {
     code_ +=
         "inline flatbuffers::Offset<{{STRUCT_NAME}}> "
         "Create{{STRUCT_NAME}}(";
-    code_ += "    flatbuffers::FlatBufferBuilder &_fbb\\";
+    code_ += "    " + GetBufferBuilderType() + " &_fbb\\";
     for (auto it = struct_def.fields.vec.begin();
          it != struct_def.fields.vec.end(); ++it) {
       const auto &field = **it;
@@ -2255,7 +2261,7 @@ class CppGenerator : public BaseGenerator {
       code_ +=
           "inline flatbuffers::Offset<{{STRUCT_NAME}}> "
           "Create{{STRUCT_NAME}}Direct(";
-      code_ += "    flatbuffers::FlatBufferBuilder &_fbb\\";
+      code_ += "    " + GetBufferBuilderType() + " &_fbb\\";
       for (auto it = struct_def.fields.vec.begin();
            it != struct_def.fields.vec.end(); ++it) {
         const auto &field = **it;
@@ -2721,7 +2727,7 @@ class CppGenerator : public BaseGenerator {
 
       code_ +=
           "  struct _VectorArgs "
-          "{ flatbuffers::FlatBufferBuilder *__fbb; "
+          "{ " + GetBufferBuilderType() + " *__fbb; "
           "const " +
           NativeName(Name(struct_def), &struct_def, parser_.opts) +
           "* __o; "
