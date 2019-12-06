@@ -2352,7 +2352,10 @@ class CppGenerator : public BaseGenerator {
         if (IsStruct(type)) {
           auto native_type = type.struct_def->attributes.Lookup("native_type");
           if (native_type) {
-            return "flatbuffers::UnPack(*" + val + ")";
+            if (parser_.opts.zrpc_enabled)
+              return "::zrpc::flatbuffers::UnPack(*" + val + ")";
+            else
+              return "flatbuffers::UnPack(*" + val + ")";
           } else if (invector || afield.native_inline) {
             return "*" + val;
           } else {
