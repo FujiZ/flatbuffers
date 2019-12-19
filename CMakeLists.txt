@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 2.8)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CheckCXXSymbolExists)
 
+if(POLICY CMP0048)
+    cmake_policy(SET CMP0048 OLD)
+endif()
+
 project(FlatBuffers)
 
 # NOTE: Code coverage only works on Linux & OSX.
