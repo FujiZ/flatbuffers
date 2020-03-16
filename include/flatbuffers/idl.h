@@ -595,6 +595,7 @@ struct IDLOptions {
 
   IDLOptions()
       : use_flexbuffers(false),
+        zrpc_enabled(false),
         strict_json(false),
         skip_js_exports(false),
         use_goog_js_export_format(false),
